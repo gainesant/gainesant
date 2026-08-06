@@ -1,0 +1,36 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+# ModDevGradle / NeoForge run directories
+run/
+runs/
+run-data/
+logs/
+crash-reports/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+bin/
+out/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local secrets. Publishing tokens are read from the environment, never committed.
+*.env
+secrets.properties
+local.properties
+
+# Reference material used while modelling must never be committed. See README.
+/reference/

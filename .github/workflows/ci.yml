@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # The rules engine has no Minecraft dependencies, so it builds and tests on any
+  # network and any recent JDK. It is where the mechanics live, so it is the check
+  # that matters most on every commit.
+  core:
+    name: Rules engine
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Test
+        run: ./gradlew -PincludeModModule=false :core:test
+
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-test-report
+          path: core/build/reports/tests/test
+
+  # The mod needs maven.neoforged.net, piston-meta.mojang.com and
+  # libraries.minecraft.net. Some networks block those; GitHub's runners do not.
+  mod:
+    name: Mod
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build
+        run: ./gradlew build
+
+      - name: Upload jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: coreframe-jar
+          path: neoforge/build/libs/*.jar
+
+  # TODO(M1): add a dedicated-server smoke job once there is something to boot.
+  # Client-only classes leaking into common code is the most commonly shipped bug in
+  # mods like this one, and a headless `runServer` that starts and exits catches it
+  # for free. It is deliberately absent rather than stubbed, because a job that
+  # cannot fail is worse than no job.
