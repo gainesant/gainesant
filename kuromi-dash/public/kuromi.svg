@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Kuromi">
+  <!-- Fan-drawn Kuromi-style mascot for personal use. -->
+  <defs>
+    <linearGradient id="hood" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a2233"/>
+      <stop offset="1" stop-color="#0d0a11"/>
+    </linearGradient>
+  </defs>
+  <!-- tail -->
+  <path d="M150 170 q30 -4 34 -30 q2 -10 -6 -12" fill="none" stroke="#0d0a11" stroke-width="6" stroke-linecap="round"/>
+  <path d="M176 122 l10 2 l-4 10 z" fill="#0d0a11"/>
+  <!-- ears -->
+  <path d="M50 88 C28 66 16 38 26 10 C34 22 42 26 52 34 C66 44 82 50 96 60 Z" fill="url(#hood)"/>
+  <path d="M150 88 C172 66 184 38 174 10 C166 22 158 26 148 34 C134 44 118 50 104 60 Z" fill="url(#hood)"/>
+  <path d="M26 10 q-8 6 -4 14" fill="none" stroke="#0d0a11" stroke-width="5" stroke-linecap="round"/>
+  <path d="M174 10 q8 6 4 14" fill="none" stroke="#0d0a11" stroke-width="5" stroke-linecap="round"/>
+  <!-- body -->
+  <path d="M62 160 q38 30 76 0 l6 30 h-88 z" fill="#0d0a11"/>
+  <!-- hood -->
+  <ellipse cx="100" cy="108" rx="72" ry="64" fill="url(#hood)"/>
+  <!-- face -->
+  <path d="M42 128 C42 98 70 96 100 104 C130 96 158 98 158 128 C158 158 132 172 100 172 C68 172 42 158 42 128 Z" fill="#fff8fc"/>
+  <!-- skull badge -->
+  <g transform="translate(100 70)">
+    <path d="M-15 -2 a15 14 0 0 1 30 0 v6 q0 4 -4 5 v5 h-22 v-5 q-4 -1 -4 -5 z" fill="#ff5fa2"/>
+    <ellipse cx="-6" cy="0" rx="4.2" ry="4.6" fill="#0d0a11"/>
+    <ellipse cx="6" cy="0" rx="4.2" ry="4.6" fill="#0d0a11"/>
+    <path d="M0 5 l-2 4 h4 z" fill="#0d0a11"/>
+    <path d="M-6 14 v-3 M-2 14 v-3 M2 14 v-3 M6 14 v-3" stroke="#0d0a11" stroke-width="1.4"/>
+  </g>
+  <!-- eyes -->
+  <g class="eyes">
+    <ellipse cx="78" cy="130" rx="7" ry="10" fill="#0d0a11"/>
+    <ellipse cx="122" cy="130" rx="7" ry="10" fill="#0d0a11"/>
+    <circle cx="80.5" cy="126" r="2.6" fill="#fff"/>
+    <circle cx="124.5" cy="126" r="2.6" fill="#fff"/>
+  </g>
+  <!-- blush, nose, smirk -->
+  <ellipse cx="62" cy="148" rx="9" ry="5" fill="#ffb3d1"/>
+  <ellipse cx="138" cy="148" rx="9" ry="5" fill="#ffb3d1"/>
+  <ellipse cx="100" cy="143" rx="4.5" ry="3.2" fill="#ff5fa2"/>
+  <path d="M90 152 q10 8 20 0" fill="none" stroke="#0d0a11" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M108 153 l3 5 l2 -6" fill="#fff8fc" stroke="#0d0a11" stroke-width="1.6" stroke-linejoin="round"/>
+</svg>
