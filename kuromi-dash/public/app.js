@@ -1,5 +1,3 @@
-import { PhoneLink, KeyCode, isSupported } from "./vendor/phone.js";
-
 const $ = (sel) => document.querySelector(sel);
 
 const store = {
@@ -40,9 +38,136 @@ function tickClock() {
 tickClock();
 setInterval(tickClock, 1000);
 
-// ---------- speed (GPS) ----------
+// ---------- opening Android apps ----------
+// In DeX, following an intent: link opens the app in its own window on top of the
+// dashboard. Chrome and Samsung Internet only launch activities that accept web links
+// (BROWSABLE), so each app is reached through a link it already handles.
+const isAndroid = /Android/i.test(navigator.userAgent);
+
+function intentFor(url, pkg) {
+    const u = new URL(url);
+    const fallback = encodeURIComponent(url);
+    return `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=${u.protocol.slice(0, -1)};package=${pkg};S.browser_fallback_url=${fallback};end`;
+}
+
+function openApp(app, url = app.url) {
+    if (!isAndroid) {
+        // Testing on a computer: show the web version instead.
+        if (app.pkg) window.open(url, "_blank", "noopener");
+        else toast(`${app.label} opens on the phone`);
+        return;
+    }
+    location.href = app.pkg ? intentFor(url, app.pkg) : url;
+}
+
+const icons = {
+    pin: '<svg viewBox="0 0 24 24"><path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/></svg>',
+    waze: '<svg viewBox="0 0 24 24"><path d="M4 14a8 7 0 1 1 16 0c0 2-2 3-4 3H8c-2 0-4-1-4-3z"/><circle cx="9" cy="11" r="1"/><circle cx="15" cy="11" r="1"/></svg>',
+    spotify: '<svg viewBox="0 0 24 24"><path d="M6 9c4-1 8-1 12 1M7 13c3-1 7-.5 10 1M8 16.5c2.5-.7 5-.4 7 .7"/></svg>',
+    play: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m10 9 5 3-5 3z"/></svg>',
+    phone: '<svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1z"/></svg>',
+    chat: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>',
+    mail: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
+};
+
+const apps = {
+    drive: [
+        { label: "Maps", pkg: "com.google.android.apps.maps", url: "https://maps.google.com/", c: "#34a853", icon: icons.pin },
+        { label: "Waze", pkg: "com.waze", url: "https://waze.com/ul", c: "#33ccff", icon: icons.waze },
+    ],
+    listen: [
+        { label: "Spotify", pkg: "com.spotify.music", url: "https://open.spotify.com/", c: "#1db954", icon: icons.spotify },
+        { label: "YT Music", pkg: "com.google.android.apps.youtube.music", url: "https://music.youtube.com/", c: "#ff0033", icon: icons.play },
+    ],
+    talk: [
+        { label: "Phone", url: "tel:", c: "#7a5af8", icon: icons.phone },
+        { label: "Messages", url: "sms:", c: "#ff5fa2", icon: icons.chat },
+        { label: "Email", url: "mailto:", c: "#6b3fa0", icon: icons.mail },
+    ],
+};
+
+for (const [group, list] of Object.entries(apps)) {
+    const host = document.querySelector(`[data-group="${group}"]`);
+    host.innerHTML = list
+        .map((a, i) => `<button class="app" data-app="${group}:${i}"><i style="--c:${a.c}">${a.icon}</i>${a.label}</button>`)
+        .join("");
+}
+document.querySelectorAll(".apps").forEach((host) =>
+    host.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-app]");
+        if (!btn) return;
+        const [group, i] = btn.dataset.app.split(":");
+        openApp(apps[group][i]);
+    }),
+);
+
+// Destination box: hands the trip to Google Maps or Waze with turn-by-turn started.
+$("#go").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const dest = $("#dest").value.trim();
+    if (!dest) return $("#dest").focus();
+    const q = encodeURIComponent(dest);
+    if (e.submitter?.dataset.nav === "waze") {
+        openApp(apps.drive[1], `https://waze.com/ul?q=${q}&navigate=yes`);
+    } else {
+        openApp(apps.drive[0], `https://www.google.com/maps/dir/?api=1&destination=${q}&travelmode=driving&dir_action=navigate`);
+    }
+    $("#dest").blur();
+});
+
+// ---------- map ----------
+let map;
+let marker;
+let following = true;
+let tileErrors = 0;
+
+function initMap() {
+    if (!window.L) return;
+    map = L.map("map", { zoomControl: false, attributionControl: true }).setView([39.5, -98.35], 4);
+    // Dark basemap; the pink/purple tint comes from a CSS filter in style.css.
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        maxZoom: 19,
+        subdomains: "abcd",
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>',
+    })
+        .on("tileerror", () => {
+            if (++tileErrors === 4 && !navigator.onLine) showWelcome("Map needs internet", "Speed, clock and apps still work offline.");
+        })
+        .on("tileload", () => {
+            tileErrors = 0;
+            if (lastFix) $("#welcome").hidden = true;
+        })
+        .addTo(map);
+    marker = L.marker([0, 0], {
+        icon: L.divIcon({ className: "me-marker", html: '<img src="kuromi.svg" alt="">', iconSize: [56, 56], iconAnchor: [28, 44] }),
+        interactive: false,
+    });
+    map.on("dragstart", () => {
+        following = false;
+        $("#recenter").hidden = false;
+    });
+    new ResizeObserver(() => map.invalidateSize()).observe($("#stage"));
+}
+initMap();
+
+function recenter() {
+    following = true;
+    $("#recenter").hidden = true;
+    if (lastFix) map?.setView(lastFix, Math.max(map.getZoom(), 16));
+}
+$("#recenter").addEventListener("click", recenter);
+$("#dock-me").addEventListener("click", recenter);
+
+function showWelcome(title, text) {
+    $("#welcome-title").textContent = title;
+    $("#welcome-text").textContent = text;
+    $("#welcome").hidden = false;
+}
+
+// ---------- GPS: speed + map ----------
 let units = store.get("units", "mph");
 let lastSpeed = null;
+let lastFix = null;
 const GAUGE_LEN = 252; // length of the gauge arc path
 const GAUGE_MAX = { mph: 100, "km/h": 160 };
 
@@ -65,23 +190,61 @@ $("#units").addEventListener("click", () => {
 });
 renderSpeed();
 
-if ("geolocation" in navigator) {
-    navigator.geolocation.watchPosition(
-        (pos) => {
-            // coords.speed is m/s, or null when the device can't tell (e.g. Wi-Fi location).
-            lastSpeed = pos.coords.speed ?? (lastSpeed === null ? null : lastSpeed);
-            $("#gps-note").textContent = pos.coords.speed === null ? "No speed from this GPS" : "GPS";
-            renderSpeed();
-            loadWeather(pos.coords);
-        },
-        () => ($("#gps-note").textContent = "No GPS on this computer"),
-        { enableHighAccuracy: true, maximumAge: 1000 },
-    );
-} else {
-    $("#gps-note").textContent = "No GPS on this computer";
+function setGpsChip(on, text) {
+    const chip = $("#gps-chip");
+    chip.classList.toggle("chip-on", on);
+    chip.classList.toggle("chip-off", !on);
+    $("#gps-chip-text").textContent = text;
 }
 
-// ---------- weather (optional, needs internet) ----------
+function onFix(pos) {
+    const { latitude, longitude, speed, accuracy } = pos.coords;
+    // coords.speed is m/s, or null when the phone can't tell yet.
+    lastSpeed = speed === null ? lastSpeed : speed;
+    $("#gps-note").textContent = speed === null ? "Speed shows once you're moving" : "GPS";
+    renderSpeed();
+    setGpsChip(true, accuracy < 30 ? "GPS" : `GPS ±${Math.round(accuracy)} m`);
+
+    const first = !lastFix;
+    lastFix = [latitude, longitude];
+    if (map) {
+        marker.setLatLng(lastFix);
+        if (first) {
+            marker.addTo(map);
+            map.setView(lastFix, 16);
+            $("#welcome").hidden = true;
+        } else if (following) {
+            map.panTo(lastFix, { animate: true, duration: 0.8 });
+        }
+    } else if (first) {
+        showWelcome("Map unavailable", "Couldn't load the map library.");
+    }
+    loadWeather(pos.coords);
+}
+
+function onGpsError(err) {
+    setGpsChip(false, "No GPS");
+    $("#gps-note").textContent = "No location";
+    if (!lastFix) {
+        showWelcome(
+            err.code === err.PERMISSION_DENIED ? "Location is off" : "Can't find you",
+            err.code === err.PERMISSION_DENIED
+                ? "Allow location for this site in your browser settings so the map and speed work."
+                : "Make sure location is turned on in the phone's quick settings.",
+        );
+    }
+}
+
+if (!window.isSecureContext) {
+    showWelcome("Open over https", "Location only works on an https:// address or localhost. See the README.");
+    setGpsChip(false, "No GPS");
+} else if ("geolocation" in navigator) {
+    navigator.geolocation.watchPosition(onFix, onGpsError, { enableHighAccuracy: true, maximumAge: 1000 });
+} else {
+    onGpsError({ code: 0, PERMISSION_DENIED: 1 });
+}
+
+// ---------- weather (needs internet) ----------
 let weatherLoadedAt = 0;
 async function loadWeather({ latitude, longitude }) {
     if (Date.now() - weatherLoadedAt < 15 * 60_000) return;
@@ -94,7 +257,7 @@ async function loadWeather({ latitude, longitude }) {
         el.textContent = `${Math.round(data.current.temperature_2m)}° outside`;
         el.hidden = false;
     } catch {
-        // offline in the car is normal; just leave the chip hidden
+        weatherLoadedAt = 0; // offline in the car is normal; try again on a later fix
     }
 }
 
@@ -142,120 +305,11 @@ $("#fan").addEventListener("input", () => {
 });
 renderTemp();
 
-// Hook for real hardware: listen for this event and forward it to your car
-// (e.g. an Arduino/CAN bridge over Web Serial). Nothing listens by default.
+// Hook for real hardware: listen for this event and forward it to your car.
+// Nothing listens by default.
 function emitClimate() {
     window.dispatchEvent(new CustomEvent("car:climate", { detail: { temp, fan: Number($("#fan").value) } }));
 }
-
-// ---------- phone ----------
-const phone = new PhoneLink();
-
-const apps = [
-    { label: "Maps", pkg: "com.google.android.apps.maps", c: "#34a853", icon: '<svg viewBox="0 0 24 24"><path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/></svg>' },
-    { label: "Waze", pkg: "com.waze", c: "#33ccff", icon: '<svg viewBox="0 0 24 24"><path d="M4 14a8 7 0 1 1 16 0c0 2-2 3-4 3H8c-2 0-4-1-4-3z"/><circle cx="9" cy="11" r="1"/><circle cx="15" cy="11" r="1"/></svg>' },
-    { label: "Spotify", pkg: "com.spotify.music", c: "#1db954", icon: '<svg viewBox="0 0 24 24"><path d="M6 9c4-1 8-1 12 1M7 13c3-1 7-.5 10 1M8 16.5c2.5-.7 5-.4 7 .7"/></svg>' },
-    { label: "YT Music", pkg: "com.google.android.apps.youtube.music", c: "#ff0033", icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m10 9 5 3-5 3z"/></svg>' },
-    { label: "Phone", name: "Phone", c: "#7a5af8", icon: '<svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1z"/></svg>' },
-    { label: "Messages", pkg: "com.google.android.apps.messaging", c: "#ff5fa2", icon: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>' },
-];
-$("#apps").innerHTML = apps
-    .map((a, i) => `<button class="app" data-app="${i}"><i style="--c:${a.c}">${a.icon}</i>${a.label}</button>`)
-    .join("");
-$("#apps").addEventListener("click", async (e) => {
-    const btn = e.target.closest("[data-app]");
-    if (!btn) return;
-    const app = apps[btn.dataset.app];
-    if (!phone.connected) return toast("Connect your phone first 💀");
-    try {
-        if (app.pkg) await phone.launch(app.pkg);
-        else await phone.launch(app.name, { searchByName: true });
-    } catch (err) {
-        toast(`Couldn't open ${app.label}`);
-    }
-});
-
-document.querySelectorAll("[data-key]").forEach((b) =>
-    b.addEventListener("click", () => {
-        if (!phone.connected) return toast("Connect your phone first 💀");
-        phone.pressKey(KeyCode[b.dataset.key]);
-    }),
-);
-$("#dock-home").addEventListener("click", () => phone.connected && phone.pressKey(KeyCode.Home));
-
-function setChip(on, text) {
-    const chip = $("#phone-chip");
-    chip.classList.toggle("chip-on", on);
-    chip.classList.toggle("chip-off", !on);
-    $("#phone-chip-text").textContent = text;
-}
-
-phone.addEventListener("status", (e) => {
-    $("#welcome-text").textContent = e.detail;
-    if (!phone.connected) setChip(false, e.detail.length > 28 ? "Connecting…" : e.detail);
-});
-phone.addEventListener("connected", () => {
-    $("#welcome").hidden = true;
-    $("#phone-nav").hidden = false;
-    $("#dock-unplug").hidden = false;
-    setChip(true, phone.deviceName || "Phone");
-    toast("Phone connected. Let's roll 🖤");
-});
-phone.addEventListener("disconnected", () => {
-    $("#welcome").hidden = false;
-    $("#phone-nav").hidden = true;
-    $("#dock-unplug").hidden = true;
-    $("#connect").disabled = false;
-    setChip(false, "No phone");
-});
-
-// Mode: "car" gives apps their own landscape screen sized to the stage;
-// "mirror" shows the phone's own screen.
-const modeInputs = document.querySelectorAll('input[name="mode"]');
-const savedMode = store.get("mode", "car");
-modeInputs.forEach((i) => {
-    i.checked = i.value === savedMode;
-    i.addEventListener("change", () => store.set("mode", i.value));
-});
-
-function carDisplaySize() {
-    const r = $("#stage").getBoundingClientRect();
-    const scale = Math.min(1, 1280 / r.width); // cap resolution so the phone's encoder keeps up
-    const even = (n) => Math.max(2, Math.round((n * scale) / 2) * 2);
-    return { width: even(r.width), height: even(r.height), dpi: 160 };
-}
-
-async function connect(pick) {
-    const mode = store.get("mode", "car");
-    $("#connect").disabled = true;
-    try {
-        const ok = await phone.connect($("#phone-host"), {
-            pick,
-            carDisplay: mode === "car" ? carDisplaySize() : null,
-        });
-        if (!ok) $("#connect").disabled = false;
-    } catch (err) {
-        console.error(err);
-        $("#connect").disabled = false;
-        $("#welcome-text").textContent = err?.message ?? String(err);
-        setChip(false, "No phone");
-        if (pick) toast(err?.message ?? "Couldn't connect");
-    }
-}
-
-if (!isSupported()) {
-    $("#unsupported").hidden = false;
-    $("#connect").disabled = true;
-} else {
-    $("#connect").addEventListener("click", () => connect(true));
-    // Reconnect automatically to a phone this browser has already been allowed to use,
-    // both on page load and whenever it gets plugged in.
-    connect(false);
-    navigator.usb.addEventListener("connect", () => {
-        if (!phone.connected) setTimeout(() => connect(false), 800);
-    });
-}
-$("#dock-unplug").addEventListener("click", () => phone.disconnect());
 
 // ---------- dock toggles ----------
 $("#dock-focus").addEventListener("click", (e) => {
@@ -278,7 +332,7 @@ $("#dock-full").addEventListener("click", () => {
     else document.documentElement.requestFullscreen?.().catch(() => {});
 });
 
-// Keep the screen on while the dashboard is up.
+// Keep the screen on while the dashboard is showing.
 async function keepAwake() {
     try {
         await navigator.wakeLock?.request("screen");
@@ -286,3 +340,8 @@ async function keepAwake() {
 }
 keepAwake();
 document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && keepAwake());
+
+// Offline support: cache the dashboard so it opens without signal.
+if ("serviceWorker" in navigator && window.isSecureContext) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+}

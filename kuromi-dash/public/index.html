@@ -4,8 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
   <meta name="theme-color" content="#151019">
+  <meta name="mobile-web-app-capable" content="yes">
   <title>Kuromi Dash</title>
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="kuromi.svg">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -20,9 +24,9 @@
       </div>
       <div class="status">
         <span id="weather" class="chip" hidden></span>
-        <span id="phone-chip" class="chip chip-off">
-          <svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>
-          <span id="phone-chip-text">No phone</span>
+        <span id="gps-chip" class="chip chip-off">
+          <svg viewBox="0 0 24 24"><path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/></svg>
+          <span id="gps-chip-text">Finding GPS…</span>
         </span>
         <time id="top-clock" class="top-clock">--:--</time>
       </div>
@@ -54,51 +58,43 @@
       </article>
     </section>
 
-    <!-- center: phone projection -->
+    <!-- center: live map -->
     <section class="stage" id="stage">
-      <div id="phone-host" class="phone-host"></div>
+      <div id="map" class="map" aria-label="Map of where you are"></div>
+
+      <form id="go" class="go" autocomplete="off">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+        <input id="dest" type="text" placeholder="Where to, cutie?" enterkeyhint="go" aria-label="Destination">
+        <button type="submit" data-nav="maps" class="go-btn">Maps</button>
+        <button type="submit" data-nav="waze" class="go-btn go-alt">Waze</button>
+      </form>
+
+      <button id="recenter" class="recenter" type="button" title="Back to me" hidden>
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+      </button>
 
       <div id="welcome" class="welcome">
         <img src="kuromi.svg" alt="" class="welcome-mascot">
-        <h1>Plug in your phone</h1>
-        <p id="welcome-text">Connect your Android with a USB cable and turn on <b>USB debugging</b>.</p>
-        <div class="mode-toggle" role="radiogroup" aria-label="Projection mode">
-          <label><input type="radio" name="mode" value="car" checked><span>Car screen</span></label>
-          <label><input type="radio" name="mode" value="mirror"><span>Mirror phone</span></label>
-        </div>
-        <button id="connect" class="btn btn-big" type="button">
-          <svg viewBox="0 0 24 24"><path d="M12 2v10m-4-4 4 4 4-4M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>
-          Connect phone
-        </button>
-        <p id="unsupported" class="warn" hidden>This browser can't talk to USB devices. Open the dashboard in Chrome or Edge.</p>
+        <h1 id="welcome-title">Finding you…</h1>
+        <p id="welcome-text">Allow location so Kuromi can show the map and your speed.</p>
       </div>
-
-      <nav class="phone-nav" id="phone-nav" aria-label="Phone buttons" hidden>
-        <button data-key="Back" title="Back"><svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></svg></button>
-        <button data-key="Home" title="Home"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg></button>
-        <button data-key="AppSwitch" title="Recent apps"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>
-        <button data-key="Assist" title="Assistant"><svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM6 11a6 6 0 0 0 12 0M12 17v4"/></svg></button>
-      </nav>
     </section>
 
     <!-- right column -->
     <section class="col col-right">
-      <article class="card media-card">
-        <h2>Music</h2>
-        <div class="media-row">
-          <button class="round" data-key="MediaPrevious" title="Previous"><svg viewBox="0 0 24 24"><path d="M6 5v14M18 5 9 12l9 7z"/></svg></button>
-          <button class="round round-big" data-key="MediaPlayPause" title="Play / pause"><svg viewBox="0 0 24 24"><path d="M7 5v14l6-7zM15 5v14M19 5v14"/></svg></button>
-          <button class="round" data-key="MediaNext" title="Next"><svg viewBox="0 0 24 24"><path d="M18 5v14M6 5l9 7-9 7z"/></svg></button>
-        </div>
-        <div class="media-row">
-          <button class="pill" data-key="VolumeDown" title="Volume down">Vol −</button>
-          <button class="pill" data-key="VolumeUp" title="Volume up">Vol +</button>
-        </div>
+      <article class="card apps-card">
+        <h2>Drive</h2>
+        <div class="apps" data-group="drive"></div>
       </article>
 
       <article class="card apps-card">
-        <h2>Launch</h2>
-        <div class="apps" id="apps"></div>
+        <h2>Listen</h2>
+        <div class="apps" data-group="listen"></div>
+      </article>
+
+      <article class="card apps-card">
+        <h2>Talk</h2>
+        <div class="apps" data-group="talk"></div>
       </article>
 
       <article class="card climate-card">
@@ -117,17 +113,17 @@
 
     <!-- dock -->
     <footer class="dock">
-      <button class="dock-btn" id="dock-home" title="Phone home"><svg viewBox="0 0 24 24"><path d="M3 11 12 4l9 7v9h-6v-6H9v6H3z"/></svg><span>Home</span></button>
-      <button class="dock-btn" id="dock-focus" title="Big phone screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>Focus</span></button>
+      <button class="dock-btn" id="dock-me" title="Center map on me"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg><span>Me</span></button>
+      <button class="dock-btn" id="dock-focus" title="Big map"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>Focus</span></button>
       <button class="dock-btn dock-center" id="dock-kuromi" title="Kuromi says…"><img src="kuromi.svg" alt=""></button>
       <button class="dock-btn" id="dock-night" title="Dim screen"><svg viewBox="0 0 24 24"><path d="M20 14A8 8 0 1 1 10 4a7 7 0 0 0 10 10z"/></svg><span>Dim</span></button>
       <button class="dock-btn" id="dock-full" title="Full screen"><svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg><span>Full</span></button>
-      <button class="dock-btn" id="dock-unplug" title="Disconnect phone" hidden><svg viewBox="0 0 24 24"><path d="M9 3v4M15 3v4M6 7h12v4a6 6 0 0 1-12 0zM12 17v4"/></svg><span>Unplug</span></button>
     </footer>
   </main>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <script src="vendor/leaflet/leaflet.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>
